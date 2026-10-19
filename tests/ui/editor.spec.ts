@@ -1,0 +1,77 @@
+import { test, expect } from '@playwright/test';
+import { fixture } from '../fixture.ts';
+import { readFile } from 'node:fs/promises';
+test('import, transcript seek, range cut, reload, undo/redo, caption playback and frozen export', async ({ page }, testInfo) => {
+  const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+  page.on('console', message => { if (message.type() === 'error' && !message.text().includes('favicon')) errors.push(message.text()); });
+  const files = await fixture(testInfo.outputPath('fixtures'));
+  await page.goto('/'); await expect(page).toHaveTitle('Moonjelly — Video studio');
+  await expect(page.getByRole('heading', { name: /Every story starts/ })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('01-home.png'), fullPage: true });
+  await page.getByLabel('Import media', { exact: true }).setInputFiles(files.media);
+  await expect(page.getByRole('heading', { name: 'Script', exact: true })).toBeVisible();
+  await page.getByLabel('Import timed transcript', { exact: true }).setInputFiles({ name: 'range.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify([{ text: 'Red', start: 0, end: 1000 }, { text: 'Green', start: 1000, end: 1500 }, { text: 'Filler', start: 1500, end: 2000 }, { text: 'Blue', start: 2000, end: 2100 }, { text: 'Outro', start: 2100, end: 3000 }])) });
+  const green = page.getByRole('button', { name: 'Green', exact: true });
+  await expect(green).toBeVisible(); await green.click();
+  await expect.poll(() => page.locator('video').evaluate((v: HTMLVideoElement) => Math.round(v.currentTime * 1000))).toBe(1000);
+  await page.getByRole('button', { name: 'Filler', exact: true }).click({ modifiers: ['Shift'] });
+  await page.getByRole('button', { name: 'Cut selection' }).click();
+  await expect(green).toHaveCount(0); await expect(page.getByText('2 clips', { exact: true })).toBeVisible();
+  await page.reload(); await expect(page.getByText('2 clips', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /Undo/ }).click(); await expect(green).toBeVisible();
+  await page.getByRole('button', { name: /Redo/ }).click(); await expect(green).toHaveCount(0);
+  await page.getByRole('button', { name: 'Blue', exact: true }).click();
+  await expect.poll(() => page.locator('video').evaluate((v: HTMLVideoElement) => Math.round(v.currentTime * 1000))).toBe(1000);
+  await expect(page.locator('.preview-caption')).toHaveText('Blue');
+  await expect.poll(() => page.locator('video').evaluate((v: HTMLVideoElement) => { const c = document.createElement('canvas'); c.width = c.height = 1; const ctx = c.getContext('2d')!; ctx.drawImage(v, 0, 0, 1, 1); return ctx.getImageData(0, 0, 1, 1).data[2]; })).toBeGreaterThan(180);
+  await page.screenshot({ path: testInfo.outputPath('02-cut-blue-preview.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Red', exact: true }).click();
+  await page.evaluate(() => { const seen: string[] = []; (window as unknown as { observedCaptions: string[] }).observedCaptions = seen; const sample = () => { const v = document.querySelector('video')!; if (!v.paused) seen.push(document.querySelector('.preview-caption')?.textContent ?? ''); requestAnimationFrame(sample); }; requestAnimationFrame(sample); });
+  await page.getByRole('button', { name: 'Play preview' }).click(); await expect(page.getByRole('button', { name: 'Pause preview' })).toBeVisible();
+  await expect.poll(() => page.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime)).toBeGreaterThan(1.2);
+  expect(await page.evaluate(() => (window as unknown as { observedCaptions: string[] }).observedCaptions)).toContain('Blue');
+  await page.getByRole('button', { name: 'Export ↗' }).click();
+  await expect(page.getByRole('link', { name: 'Download MP4' })).toBeVisible({ timeout: 30000 });
+  const response = await page.request.get(await page.getByRole('link', { name: 'Captions .vtt' }).getAttribute('href') ?? '');
+  expect(await response.text()).toContain('00:00:01.000 --> 00:00:01.100\nBlue');
+  const download = page.waitForEvent('download'); await page.getByRole('link', { name: 'Download MP4' }).click(); await (await download).saveAs(testInfo.outputPath('export.mp4'));
+  await page.screenshot({ path: testInfo.outputPath('03-export-ready.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 }); await page.screenshot({ path: testInfo.outputPath('04-mobile.png'), fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('delayed old preview and export responses cannot replace another project at the same revision', async ({ page }, testInfo) => {
+  const files = await fixture(testInfo.outputPath('fixtures'));
+  let release!: () => void, observed!: () => void;
+  const held = new Promise<void>(r => { release = r; }), polling = new Promise<void>(r => { observed = r; });
+  let oldJob = '';
+  await page.route('**/api/projects/*/exports', async route => {
+    const response = await route.fetch(), body = await response.json();
+    if (!oldJob) oldJob = body.id;
+    await route.fulfill({ response, json: { ...body, status: body.id === oldJob ? 'queued' : body.status } });
+  });
+  await page.route('**/api/exports/*', async route => {
+    if (!oldJob) oldJob = route.request().url().split('/').at(-1)!;
+    if (route.request().url().endsWith('/' + oldJob)) { const response = await route.fetch(); const body = await response.json(); observed(); await held; await route.fulfill({ response, json: { ...body, status: 'succeeded' } }); }
+    else await route.continue();
+  });
+  await page.goto('/');
+  await page.getByLabel('Import media', { exact: true }).setInputFiles(files.media);
+  await polling;
+  await page.getByRole('button', { name: 'Export ↗' }).click();
+  await expect(page.locator('.export-toast')).toContainText('queued');
+  await page.getByLabel('Import media', { exact: true }).setInputFiles({ name: 'Second project.mp4', mimeType: 'video/mp4', buffer: await readFile(files.media) });
+  await expect(page.locator('.breadcrumbs strong')).toHaveText('Second project');
+  await expect(page.getByRole('button', { name: 'Play preview' })).toBeEnabled();
+  const currentSource = await page.locator('video').getAttribute('src');
+  expect(currentSource).not.toContain(oldJob);
+  await page.getByRole('button', { name: 'Export ↗' }).click();
+  await expect(page.getByRole('link', { name: 'Download MP4' })).toBeVisible();
+  const latestDownload = await page.getByRole('link', { name: 'Download MP4' }).getAttribute('href');
+  const oldResponse = page.waitForResponse(r => r.url().endsWith('/exports/' + oldJob)); release(); await oldResponse;
+  await page.evaluate(() => new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
+  await expect(page.locator('video')).toHaveAttribute('src', currentSource!);
+  await expect(page.getByRole('link', { name: 'Download MP4' })).toHaveAttribute('href', latestDownload!);
+  await expect(page.getByRole('button', { name: 'Play preview' })).toBeEnabled();
+});

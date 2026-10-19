@@ -28,8 +28,8 @@ Use a controlled source with visible color markers, distinct audio tones, and a 
 
 ## Current status
 
-- Repository initialization: in progress.
-- Foundation: pending implementation and evidence.
+- Repository initialization: complete; `origin` is `taibui324/video-edit`, initial main pushed, reviewed research/specification PR #1 open.
+- Foundation checkpoint: media admission/proxy/waveform, imported timed transcripts, range cuts, immutable SQLite revisions, undo/redo, synchronized rendered preview, caption overlay/sidecar, frozen MP4 export and export cancellation implemented. See [acceptance evidence](evidence/editing-foundation.md). Automatic speech recognition remains pending, so Slice 1 is not claimed complete.
 - Slices 2–6: pending. Provider access, quality and spending selection remain unresolved; no paid calls are authorized by this document.
 
 The full product is incomplete until all applicable acceptance rows in the proposal have real evidence. Passing foundation checks cannot close the overall goal.
