@@ -1,0 +1,75 @@
+import { test, expect } from '@playwright/test';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { run, probe } from '../../server/media.ts';
+import { compositionTime, durationOf, type Project } from '../../src/domain.ts';
+import { fixture } from '../fixture.ts';
+
+test('a delayed transcription response cannot replace another project', async ({ page }, info) => {
+  const files = await fixture(info.outputPath('fixtures'));
+  await page.route('**/api/transcription', route => route.fulfill({ json: { available: true, model: 'synthetic-browser-contract' } }));
+  let release!: () => void, observed!: () => void;
+  const held = new Promise<void>(r => { release = r; }), requested = new Promise<void>(r => { observed = r; });
+  await page.route('**/api/projects/*/transcriptions', async route => {
+    if (route.request().method() === 'GET') { await route.fulfill({ json: [] }); return; }
+    const projectId = route.request().url().split('/').at(-2)!;
+    observed(); await held;
+    await route.fulfill({ json: { id: 'synthetic-old', projectId, revision: 1, status: 'succeeded', result: { language: 'en', languageProbability: 1, tokens: [{ id: 'word-0', text: 'Old-project-words', start: 0, end: 1000 }] } } });
+  });
+  await page.goto('/'); await page.getByLabel('Import media', { exact: true }).setInputFiles(files.media);
+  await page.getByRole('button', { name: 'Transcribe recording', exact: true }).click(); await requested;
+  await page.getByLabel('Import media', { exact: true }).setInputFiles(files.media);
+  await expect(page.getByRole('button', { name: 'Transcribe recording', exact: true })).toBeVisible();
+  const response = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/transcriptions')); release(); await response;
+  await expect(page.getByText('Old-project-words', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Attach recognized transcript', exact: true })).toHaveCount(0);
+});
+
+test('real local speech recognition reviews, attaches, edits, persists, plays and exports', async ({ page }, info) => {
+  test.skip(process.env.MOONJELLY_SPEECH_LIVE !== '1' || process.platform !== 'darwin', 'Opt-in local model acceptance using macOS stock speech as a controlled fixture.');
+  test.setTimeout(180000);
+  const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+  const folder = info.outputPath('fixtures'); await mkdir(folder, { recursive: true });
+  const media = join(folder, 'known-speech.aiff');
+  const spoken = 'Hello Moonjelly. Today we edit a short video. Keep the story clear and leave a little space between ideas.';
+  await run('say', ['-v', 'Samantha', '-r', '145', '-o', media, spoken], 30000);
+  await page.goto('/'); await page.getByLabel('Import media', { exact: true }).setInputFiles(media);
+  await expect(page.getByRole('button', { name: 'Transcribe recording', exact: true })).toBeEnabled({ timeout: 30000 });
+  await page.getByLabel('Recording language').selectOption('en');
+  await page.getByRole('button', { name: 'Transcribe recording', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Attach recognized transcript', exact: true })).toBeEnabled({ timeout: 90000 });
+  const projectId = new URL(page.url()).hash.slice(1);
+  const before: Project = await (await page.request.get('/api/projects/' + projectId)).json();
+  expect(before.tokens).toEqual([]); expect(before.revision).toBe(1);
+  const jobs = await (await page.request.get(`/api/projects/${projectId}/transcriptions`)).json(), transcript = jobs.at(-1);
+  expect(transcript.result.provenance.runtime).toBe('faster-whisper@1.2.1');
+  expect(transcript.result.provenance.modelSha256).toMatch(/^[a-f0-9]{64}$/);
+  const normalized = (text: string) => text.toLowerCase().replace(/[^a-z ]/g, '').trim();
+  expect(normalized(transcript.result.tokens.map((t: { text: string }) => t.text).join(' '))).toBe(normalized(spoken));
+  await page.screenshot({ path: info.outputPath('01-recognized-review.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Attach recognized transcript', exact: true }).click();
+  const short = page.locator('.word-list').getByRole('button', { name: 'short', exact: true }); await expect(short).toBeVisible(); await short.click();
+  await page.getByRole('button', { name: 'Cut selection', exact: true }).click(); await expect(short).toHaveCount(0);
+  await page.reload(); await expect(page.getByText('2 clips', { exact: true })).toBeVisible();
+  const edited: Project = await (await page.request.get('/api/projects/' + projectId)).json();
+  expect(edited.tokens).toHaveLength(transcript.result.tokens.length);
+  const story = edited.tokens.find(t => t.text.toLowerCase() === 'story')!;
+  await page.locator('.word-list').getByRole('button', { name: 'story', exact: true }).click();
+  await expect.poll(() => page.locator('.preview video').evaluate((v: HTMLVideoElement) => Math.round(v.currentTime * 1000))).toBe(compositionTime(edited.clips, story.start));
+  await expect(page.locator('.preview-caption')).toHaveText(story.text);
+  await page.getByRole('button', { name: 'Play preview', exact: true }).click();
+  await expect.poll(() => page.locator('.preview video').evaluate((v: HTMLVideoElement) => v.currentTime)).toBeGreaterThan(compositionTime(edited.clips, story.start)! / 1000 + 0.1);
+  await page.getByRole('button', { name: 'Pause preview', exact: true }).click();
+  await page.getByRole('button', { name: 'Export ↗', exact: true }).click();
+  await expect(page.getByRole('link', { name: 'Download MP4' })).toBeVisible();
+  const download = page.waitForEvent('download'); await page.getByRole('link', { name: 'Download MP4' }).click(); const output = info.outputPath('recognized-edit.mp4'); await (await download).saveAs(output);
+  const mediaInfo = await probe(output); expect(mediaInfo.streams.map((s: { codec_type: string }) => s.codec_type)).toEqual(expect.arrayContaining(['video', 'audio']));
+  expect(Math.abs(Number(mediaInfo.format.duration) * 1000 - durationOf(edited.clips))).toBeLessThan(100);
+  const vtt = await (await page.request.get((await page.getByRole('link', { name: 'Captions .vtt' }).getAttribute('href'))!)).text(); expect(vtt).toContain('story'); expect(vtt).not.toContain('\nshort\n');
+  await page.screenshot({ path: info.outputPath('02-recognized-edit-export.png'), fullPage: true });
+  await page.getByRole('button', { name: /Undo/ }).click(); await expect(short).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(errors).toEqual([]);
+  await writeFile(info.outputPath('local-speech-evidence.json'), JSON.stringify({ testedAt: new Date().toISOString(), fixture: 'macOS Samantha stock synthesis; controlled English sentence, not a human-recording quality benchmark', model: transcript.model, provenance: transcript.result.provenance, language: transcript.result.language, recognizedWords: transcript.result.tokens.length, exactNormalizedWords: true, unchangedBeforeAttach: true, persistedCut: true, played: true, undoRestored: true, exportDurationSeconds: Number(mediaInfo.format.duration), expectedDurationMs: durationOf(edited.clips), captionsMatched: true, browserErrors: errors }, null, 2));
+});
