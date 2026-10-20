@@ -1,0 +1,48 @@
+{
+  "testedAt": "2026-10-20T03:52:56.809Z",
+  "provider": "installed Codex CLI with ChatGPT login",
+  "requestedModel": "gpt-6.1-sol",
+  "threadFingerprint": "66192ee185a1fb604bd31dd118c725218fe28bafeabbbdc2795f2bb228e153a0",
+  "plan": {
+    "summary": "Remove the selected filler word “um”; keep Red and Blue unchanged.",
+    "operations": [
+      {
+        "kind": "remove_words",
+        "first": "word-1",
+        "last": "word-1",
+        "reason": "Remove only the filler word “um”."
+      }
+    ]
+  },
+  "scope": [
+    "word-1",
+    "word-1"
+  ],
+  "terminalCompletedAndExitZero": true,
+  "realReconnectObserved": false,
+  "retryEventCoverage": "synthetic CLI fixture only",
+  "proposedVideoPreviewSeconds": 2,
+  "auditionDecodedBlue": true,
+  "auditionPlayed": true,
+  "unchangedUntilApply": true,
+  "persistedAfterReload": true,
+  "exported": true,
+  "exportProbe": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_type": "video"
+      },
+      {
+        "codec_type": "audio"
+      }
+    ],
+    "format": {
+      "duration": "2.000000"
+    }
+  },
+  "undoRestoredFiller": true,
+  "errors": [],
+  "localArtifacts": ".artifacts/codex-retry-acceptance/codex-live-Codex-subscript-f32b6-pplies-persists-and-exports"
+}
