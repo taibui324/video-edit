@@ -1,0 +1,28 @@
+# Codex subscription editing checkpoint — 2026-10-20
+
+The user selected their existing ChatGPT/Codex subscription. This implementation invokes the installed Codex CLI with its normal login; it does not extract tokens, copy authentication stores, automate account login, or use Platform API keys. It is a local single-creator integration, not a public service built around shared subscription credentials.
+
+## Verified behavior
+
+- Installed Codex CLI 0.163.0 reports ChatGPT login. Each planning job checks that status again and supplies `forced_login_method="chatgpt"` to execution. The subprocess environment forwards an explicit operating-system allowlist and excludes API keys and inherited credential environment variables.
+- Codex receives only an instruction, active timed words in scope, and whether the scope is selected words or the composition. It returns schema-constrained word removals and pause trims. The engine independently rejects out-of-scope IDs, non-adjacent pause anchors, invalid times, overlapping operations, unsupported operations and whole-composition deletion.
+- Requests persist queued/running/succeeded/failed/cancelled states, the base revision, selected scope, requested model and Codex thread ID. Five simultaneous identical requests reuse one job. Interrupted running jobs fail visibly; they are not silently resubmitted.
+- A proposed video renders from the immutable base revision and validated plan without modifying the project. Proposed renders are isolated from normal preview/export caching. Applying creates one revision with an undoable change set. Stale apply and stale audition requests fail safely.
+
+## Evidence boundaries
+
+`pnpm build` and `pnpm test` verify the engine, SQLite history, API contracts, media renders and CLI transport. Synthetic planner/CLI fixtures exercise failure, cancellation, authentication switching and deduplication without contacting OpenAI. The media integration compares decoded-frame hashes of a proposed audition and the equivalent applied export.
+
+The opt-in Playwright test `tests/ui/codex.spec.ts` uses the actual installed, ChatGPT-authenticated Codex CLI. On a controlled three-second color/tone clip with an explicit timed transcript, a real request removes only the selected filler word, keeps the composition unchanged during review/audition, applies the cut, survives reload, exports MP4 and restores the removed word via Undo. The requested model is `gpt-6.1-sol`; server-side routing beyond the CLI request is not independently attested. Browser evidence records the actual session, not a simulated provider response. The fixture verifies the requested cut, not speech recognition or natural-language media quality.
+
+Run with `MOONJELLY_CODEX_LIVE=1 pnpm exec playwright test tests/ui/codex.spec.ts --output .artifacts/codex-live`. The live test consumes subscription usage and is intentionally skipped in CI. Local live artifacts include screenshots, session video, exported MP4 and `subscription-evidence.json`; the raw thread ID remains in ignored local artifacts. The repository includes a sanitized acceptance record. CI uploads separate contract-test browser evidence when its verification run succeeds. Cancelling a local request does not reverse subscription usage already consumed.
+
+## Source and review
+
+opensrc supplied Codex source at `~/.opensrc/repos/github.com/openai/codex/rust/v0.163.0`. The pinned source establishes CLI authentication/config handling, JSONL thread events and shell feature gating. A plain `mcp_servers={}` override recursively merges configuration and cannot be used as a clearing mechanism; this implementation instead ignores user configuration and starts in a clean temporary working directory. Shell, apps, plugins, browser/computer, multi-agent and image-view features are disabled; web search is disabled. A read-only sandbox and no-approval policy constrain remaining tools. The patch tool can remain advertised by Codex, so this is not claimed to be a universally tool-free provider. Unsupported tool events fail the job without accepting a plan. No such tool action occurred in the successful live runs.
+
+Independent review found an authentication-switch gap: checking only startup status could later allow API-key login. Per-job checks and forced ChatGPT authentication fixed it, with a synthetic regression. Final re-review found no remaining blockers. Official references: [non-interactive CLI](https://learn.chatgpt.com/docs/non-interactive-mode), [authentication](https://learn.chatgpt.com/docs/auth), [usage](https://learn.chatgpt.com/docs/pricing).
+
+## Remaining full-product work
+
+This checkpoint supports structured transcript cuts and pause shortening. Script/storyboard generation, B-roll insertion, automatic speech recognition, actual narration/voice regeneration, generated image/video assets and extended parity remain pending. A successful Codex text-editing request does not establish that subscription access includes image generation, speech/transcription or video generation. The full goal remains active.

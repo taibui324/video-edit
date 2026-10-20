@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["summary", "operations"],
+  "properties": {
+    "summary": { "type": "string" },
+    "operations": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          { "type": "object", "additionalProperties": false, "required": ["kind", "first", "last", "reason"], "properties": { "kind": { "type": "string", "enum": ["remove_words"] }, "first": { "type": "string" }, "last": { "type": "string" }, "reason": { "type": "string" } } },
+          { "type": "object", "additionalProperties": false, "required": ["kind", "after", "before", "keepMs", "reason"], "properties": { "kind": { "type": "string", "enum": ["shorten_gap"] }, "after": { "type": "string" }, "before": { "type": "string" }, "keepMs": { "type": "integer" }, "reason": { "type": "string" } } }
+        ]
+      }
+    }
+  }
+}

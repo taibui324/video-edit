@@ -28,8 +28,9 @@ Use a controlled source with visible color markers, distinct audio tones, and a 
 
 ## Current status
 
-- Repository initialization: complete; `origin` is `taibui324/video-edit`, initial main pushed, reviewed research/specification PR #1 open.
+- Repository initialization: complete; `origin` is `taibui324/video-edit`; reviewed research/specification PR #1 and editing-foundation PR #2 are merged.
 - Foundation checkpoint: media admission/proxy/waveform, imported timed transcripts, range cuts, immutable SQLite revisions, undo/redo, synchronized rendered preview, caption overlay/sidecar, frozen MP4 export and export cancellation implemented. See [acceptance evidence](evidence/editing-foundation.md). Automatic speech recognition remains pending, so Slice 1 is not claimed complete.
-- Slices 2–6: pending. Provider access, quality and spending selection remain unresolved; no paid calls are authorized by this document.
+- Slice 2 checkpoint: Codex subscription-backed word cuts and pause-shortening proposals, selected-region validation, non-mutating rendered preview, explicit apply/undo and durable jobs implemented. See [Codex acceptance evidence](evidence/codex-editing.md). B-roll and the remaining structured operations are pending; Slice 2 is not claimed complete.
+- Slices 3–6: pending. The user selected the existing ChatGPT/Codex subscription for supported AI planning. No Platform API-key billing or separate paid media-provider calls are authorized. Speech and image/video generation still require functioning adapters and real acceptance.
 
 The full product is incomplete until all applicable acceptance rows in the proposal have real evidence. Passing foundation checks cannot close the overall goal.

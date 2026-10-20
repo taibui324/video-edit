@@ -1,0 +1,53 @@
+import { test, expect } from '@playwright/test';
+import { writeFile } from 'node:fs/promises';
+import { fixture } from '../fixture.ts';
+import type { Proposal } from '../../src/proposals.ts';
+
+test('live Codex subscription proposes a filler cut, waits for review, applies, persists and exports', async ({ page }, testInfo) => {
+  test.skip(process.env.MOONJELLY_CODEX_LIVE !== '1', 'Explicit opt-in consumes ChatGPT/Codex plan usage; CI does not call a provider.');
+  test.setTimeout(360000);
+  const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+  const files = await fixture(testInfo.outputPath('fixtures'));
+  await page.goto('/');
+  await page.getByLabel('Import media', { exact: true }).setInputFiles(files.media);
+  await expect(page.getByRole('heading', { name: 'Script', exact: true })).toBeVisible();
+  await page.getByLabel('Import timed transcript', { exact: true }).setInputFiles({ name: 'filler.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify([
+    { text: 'Red', start: 0, end: 1000 }, { text: 'um', start: 1000, end: 2000 }, { text: 'Blue', start: 2000, end: 3000 }
+  ])) });
+  await expect(page.getByRole('button', { name: 'Request edit plan' })).toBeEnabled();
+  await page.getByRole('button', { name: 'um', exact: true }).click();
+  await expect(page.getByLabel('Selected words only')).toBeChecked();
+  await page.getByLabel('Describe your edit').fill('Remove only the filler word "um". Keep Red and Blue exactly.');
+  await page.getByRole('button', { name: 'Request edit plan' }).click();
+  await expect(page.getByRole('button', { name: 'Apply proposed edits' })).toBeEnabled({ timeout: 300000 });
+  const projectId = new URL(page.url()).hash.slice(1);
+  const proposals: Proposal[] = await (await page.request.get(`/api/projects/${projectId}/proposals`)).json();
+  const proposal = proposals.at(-1)!;
+  expect(proposal.status).toBe('succeeded'); expect(proposal.threadId).toBeTruthy();
+  expect(proposal.scope).toEqual(['word-1', 'word-1']);
+  expect(proposal.plan?.operations).toEqual([expect.objectContaining({ kind: 'remove_words', first: 'word-1', last: 'word-1' })]);
+  const before = await (await page.request.get(`/api/projects/${projectId}`)).json(); expect(before.clips).toHaveLength(1); expect(before.revision).toBe(proposal.revision);
+  await page.getByRole('button', { name: 'Preview proposed edit' }).click();
+  const audition = page.getByLabel('Proposed edit preview', { exact: true }); await expect(audition).toBeVisible();
+  await expect.poll(() => audition.evaluate((v: HTMLVideoElement) => v.duration)).toBe(2);
+  await audition.evaluate((v: HTMLVideoElement) => { v.currentTime = 1.5; });
+  await expect.poll(() => audition.evaluate((v: HTMLVideoElement) => { const canvas = document.createElement('canvas'); canvas.width = canvas.height = 1; const context = canvas.getContext('2d')!; context.drawImage(v, 0, 0, 1, 1); return context.getImageData(0, 0, 1, 1).data[2]; })).toBeGreaterThan(180);
+  await audition.evaluate((v: HTMLVideoElement) => v.play());
+  await expect.poll(() => audition.evaluate((v: HTMLVideoElement) => v.currentTime)).toBeGreaterThan(1.6);
+  await audition.evaluate((v: HTMLVideoElement) => v.pause());
+  const afterAudition = await (await page.request.get(`/api/projects/${projectId}`)).json(); expect(afterAudition.revision).toBe(proposal.revision); expect(afterAudition.clips).toHaveLength(1);
+  await page.screenshot({ path: testInfo.outputPath('01-real-codex-proposal.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Apply proposed edits' }).click();
+  await expect(page.getByRole('button', { name: 'um', exact: true })).toHaveCount(0);
+  await expect(page.getByText('2 clips', { exact: true })).toBeVisible();
+  await page.reload(); await expect(page.getByText('2 clips', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Blue', exact: true }).click();
+  await expect(page.locator('.preview-caption')).toHaveText('Blue');
+  await page.screenshot({ path: testInfo.outputPath('02-applied-real-codex-plan.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Export ↗' }).click();
+  await expect(page.getByRole('link', { name: 'Download MP4' })).toBeVisible();
+  const download = page.waitForEvent('download'); await page.getByRole('link', { name: 'Download MP4' }).click(); await (await download).saveAs(testInfo.outputPath('real-codex-edit.mp4'));
+  await page.getByRole('button', { name: /Undo/ }).click(); await expect(page.getByRole('button', { name: 'um', exact: true })).toBeVisible();
+  await writeFile(testInfo.outputPath('subscription-evidence.json'), JSON.stringify({ testedAt: new Date().toISOString(), provider: 'installed Codex CLI with ChatGPT login', requestedModel: proposal.model, proposal, proposedVideoPreviewSeconds: 2, auditionDecodedBlue: true, auditionPlayed: true, unchangedUntilApply: true, persistedAfterReload: true, exported: true, undoRestoredFiller: true, errors }, null, 2));
+  expect(errors).toEqual([]);
+});
