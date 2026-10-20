@@ -2,4 +2,4 @@
 name = "moonjelly-local-speech"
 version = "0.1.0"
 requires-python = ">=3.11,<3.12"
-dependencies = ["faster-whisper==1.2.1"]
+dependencies = ["faster-whisper==1.2.1", "kokoro-onnx==0.6.1"]

@@ -13,7 +13,9 @@ import { proposalRoutes } from './proposals.ts';
 import { applyPlan, type Proposal } from '../src/proposals.ts';
 import { localTranscriber, type Transcriber } from './whisper.ts';
 import { transcriptionRoutes } from './transcriptions.ts';
-export async function createApp(root: string, options: { planner?: Planner; transcriber?: Transcriber } = {}) {
+import { localNarrator, type Narrator } from './narrator.ts';
+import { narrationRoutes } from './narrations.ts';
+export async function createApp(root: string, options: { planner?: Planner; transcriber?: Transcriber; narrator?: Narrator } = {}) {
   await mkdir(root, { recursive: true, mode: 0o700 });
   const store = new Store(join(root, 'studio.sqlite')), app = express();
   const assetPath = (id: string) => join(root, 'assets', id);
@@ -33,6 +35,7 @@ export async function createApp(root: string, options: { planner?: Planner; tran
   app.use(express.json({ limit: '8mb' }));
   const closeProposals = proposalRoutes(app, store, options.planner ?? await codexPlanner());
   const closeTranscriptions = transcriptionRoutes(app, store, root, options.transcriber ?? await localTranscriber());
+  const closeNarrations = await narrationRoutes(app, store, root, options.narrator ?? await localNarrator());
   app.get('/api/health', (_req, res) => res.json({ status: 'ok', transcription: 'local-whisper-or-timed-sidecar', storage: 'sqlite' }));
   app.get('/api/projects', (_req, res) => res.json(store.db.prepare('SELECT id,title,revision FROM projects ORDER BY rowid DESC').all()));
   app.post('/api/assets', async (req, res) => {
@@ -119,5 +122,5 @@ export async function createApp(root: string, options: { planner?: Planner; tran
     } catch (e) { if (getJob(j.id).status !== 'cancelled') saveJob({ ...j, status: 'failed', error: (e as Error).message }); }
     finally { if (getJob(j.id).status === 'cancelled') await rm(jobPath(j.id), { recursive: true, force: true }); busy = false; active = null; }
   }, 200);
-  return { app, store, async close() { if (closed) return; closed = true; clearInterval(timer); await closeProposals(); await closeTranscriptions(); while (busy) await new Promise(r => setTimeout(r, 50)); store.db.close(); } };
+  return { app, store, async close() { if (closed) return; closed = true; clearInterval(timer); await closeProposals(); await closeTranscriptions(); await closeNarrations(); while (busy) await new Promise(r => setTimeout(r, 50)); store.db.close(); } };
 }
