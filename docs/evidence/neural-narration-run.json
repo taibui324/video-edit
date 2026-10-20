@@ -1,0 +1,37 @@
+{
+  "testedAt": "2026-10-20T03:43:12.611Z",
+  "fixture": "Controlled original 16-word English script; actual local neural synthesis and actual local recognition, not a human-quality benchmark",
+  "model": "Kokoro ONNX · local neural voice",
+  "provenance": {
+    "runtime": "kokoro-onnx@0.6.1",
+    "sampleRate": 24000,
+    "checksums": {
+      "kokoro-v1.0.onnx": "beb0d1848dee9a49da392cc3df26958d46cfa35d321edf434f52949153f0df3a",
+      "voices-v1.0.bin": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+    }
+  },
+  "secondVoice": {
+    "voice": "am_michael",
+    "speed": 1.1,
+    "distinctAudio": true
+  },
+  "recognizedWords": 16,
+  "exactNormalizedWords": true,
+  "played": true,
+  "persisted": true,
+  "cut": true,
+  "undoRestored": true,
+  "exportDurationSeconds": 4.8,
+  "expectedDurationMs": 4798,
+  "browserErrors": [],
+  "localArtifacts": ".artifacts/voice-release-acceptance/narration-local-neural-nar-7b432-ibes-cuts-plays-and-exports",
+  "additionalProbes": {
+    "networkDeniedSynthesis": true,
+    "actualPythonCancellation": {
+      "childExited": true,
+      "requestRemoved": true,
+      "partialMediaRemoved": true,
+      "abortMs": 83
+    }
+  }
+}

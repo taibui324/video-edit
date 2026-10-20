@@ -1,7 +1,7 @@
 export interface Token { id: string; text: string; start: number; end: number }
 export interface Clip { start: number; end: number }
 export interface Content { clips: Clip[]; tokens: Token[] }
-export interface Asset { id: string; name: string; duration: number; checksum: string }
+export interface Asset { id: string; name: string; duration: number; checksum: string; origin?: { kind: 'narration'; text: string; voice: string; speed: number; model: string; provenance: import('./narration.ts').VoiceProvenance } }
 export interface Project extends Content { id: string; title: string; revision: number; asset: Asset; canUndo: boolean; canRedo: boolean }
 export interface Job { id: string; projectId: string; revision: number; status: string; error?: string; duration: number; proposalId?: string }
 export class InputError extends Error { constructor(message: string, public status = 400) { super(message); } }

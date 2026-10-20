@@ -8,6 +8,7 @@ export class Store {
     this.db = new DatabaseSync(path);
     this.db.exec(`PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS assets (id TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, title TEXT NOT NULL, assetId TEXT NOT NULL, revision INTEGER NOT NULL, undo TEXT NOT NULL, redo TEXT NOT NULL); CREATE TABLE IF NOT EXISTS revisions (projectId TEXT NOT NULL, revision INTEGER NOT NULL, content TEXT NOT NULL, PRIMARY KEY(projectId,revision)); CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS proposals (id TEXT PRIMARY KEY, value TEXT NOT NULL);`);
     this.db.exec('CREATE TABLE IF NOT EXISTS transcriptions (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
+    this.db.exec('CREATE TABLE IF NOT EXISTS narrations (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
   }
   asset(id: string): Asset { const row = this.db.prepare('SELECT value FROM assets WHERE id=?').get(id); if (!row) throw new InputError('Media not found.', 404); return JSON.parse(row.value as string); }
   head(id: string): Head { const row = this.db.prepare('SELECT * FROM projects WHERE id=?').get(id); if (!row) throw new InputError('Project not found.', 404); return row as unknown as Head; }
