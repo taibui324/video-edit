@@ -8,7 +8,7 @@ import { probe, run } from '../server/media.ts';
 import { Store } from '../server/store.ts';
 import { fixture, fixtureTokens } from './fixture.ts';
 test('real API import, revision conflicts, history, frozen export, pixel/audio timing and restart persistence', { timeout: 120000 }, async () => {
-  const root = await mkdtemp(join(tmpdir(), 'moonjelly-api-')), files = await fixture(root), studio = await createApp(join(root, '.data'));
+  const root = await mkdtemp(join(tmpdir(), 'moonjelly-api-')), files = await fixture(root), studio = await createApp(join(root, '.data'), { planner: { model: 'synthetic-contract', available: true, async plan() { return { summary: 'Remove the middle marker.', operations: [{ kind: 'remove_words', first: 'word-1', last: 'word-1', reason: 'Controlled fixture.' }] }; } } });
   const server = studio.app.listen(0, '127.0.0.1'); await new Promise<void>(r => server.once('listening', r));
   const address = server.address() as { port: number }, base = `http://127.0.0.1:${address.port}/api`;
   const headers = {};
@@ -20,18 +20,31 @@ test('real API import, revision conflicts, history, frozen export, pixel/audio t
     const created = await request('/projects', { assetId: asset.id, title: 'Marker proof' }); assert.equal(created.status, 201); let p = await created.json();
     assert.equal((await request(`/projects/${p.id}/commands`, { revision: p.revision, op: 'transcript', value: [{ text: 'bad', start: 1, end: 99999 }] })).status, 400);
     p = await (await request(`/projects/${p.id}/commands`, { revision: p.revision, op: 'transcript', value: fixtureTokens })).json();
+    const proposed = await (await request(`/projects/${p.id}/proposals`, { revision: p.revision, instruction: 'Remove middle marker.', scope: null })).json();
+    let proposalState;
+    for (let i = 0; i < 200; i++) { proposalState = await (await request(`/proposals/${proposed.id}`)).json(); if (['succeeded', 'failed'].includes(proposalState.status)) break; await new Promise(r => setTimeout(r, 100)); }
+    assert.equal(proposalState.status, 'succeeded', proposalState.error);
+    const audition = await (await request(`/proposals/${proposed.id}/preview`, { revision: p.revision })).json();
+    let auditionState;
+    for (let i = 0; i < 200; i++) { auditionState = await (await request(`/exports/${audition.id}`)).json(); if (['succeeded', 'failed'].includes(auditionState.status)) break; await new Promise(r => setTimeout(r, 100)); }
+    assert.equal(auditionState.status, 'succeeded', auditionState.error);
+    assert.equal(studio.store.get(p.id).revision, p.revision); assert.equal(studio.store.get(p.id).clips.length, 1);
     const beforeCut = p.revision;
     p = await (await request(`/projects/${p.id}/commands`, { revision: p.revision, op: 'cut', value: ['word-1', 'word-1'] })).json();
     assert.deepEqual(p.clips, [{ start: 0, end: 1000 }, { start: 2000, end: 3000 }]);
+    assert.equal((await request(`/proposals/${proposed.id}/preview`, { revision: beforeCut })).status, 409);
     assert.equal((await request(`/projects/${p.id}/commands`, { revision: beforeCut, op: 'undo' })).status, 409);
     const parallel = await Promise.all(Array.from({ length: 5 }, async () => (await request(`/projects/${p.id}/exports`, { revision: p.revision })).json()));
     assert.equal(new Set(parallel.map(j => j.id)).size, 1); const job = parallel[0];
+    assert.notEqual(job.id, audition.id);
     assert.equal((await (await request(`/projects/${p.id}/exports`, { revision: p.revision })).json()).id, job.id);
     p = await (await request(`/projects/${p.id}/commands`, { revision: p.revision, op: 'undo' })).json(); assert.equal(p.clips.length, 1);
     p = await (await request(`/projects/${p.id}/commands`, { revision: p.revision, op: 'redo' })).json(); assert.equal(p.clips.length, 2);
     let status; for (let i = 0; i < 200; i++) { status = await (await request('/exports/' + job.id)).json(); if (['succeeded', 'failed'].includes(status.status)) break; await new Promise(r => setTimeout(r, 100)); }
     assert.equal(status.status, 'succeeded', status.error);
     const out = join(root, '.data', 'exports', job.id, 'video.mp4'), info = await probe(out); assert.ok(Math.abs(Number(info.format.duration) - 2) < .08); assert.deepEqual(info.streams.map((s: { codec_type: string }) => s.codec_type).sort(), ['audio', 'video']);
+    const auditionFile = join(root, '.data', 'exports', audition.id, 'video.mp4');
+    assert.equal(await run('ffmpeg', ['-v', 'error', '-i', auditionFile, '-an', '-f', 'framemd5', '-']), await run('ffmpeg', ['-v', 'error', '-i', out, '-an', '-f', 'framemd5', '-']));
     const vtt = await (await request(`/exports/${job.id}/captions.vtt`)).text(); assert.doesNotMatch(vtt, /Green/); assert.match(vtt, /00:00:01.000 --> 00:00:02.000\nBlue/);
     for (const [time, expected] of [[.5, 'red'], [1.5, 'blue']] as const) {
       const frame = join(root, `frame-${time}.rgb`); await run('ffmpeg', ['-y', '-v', 'error', '-ss', String(time), '-i', out, '-vf', 'scale=1:1', '-frames:v', '1', '-pix_fmt', 'rgb24', '-f', 'rawvideo', frame]); const pixel = await readFile(frame);

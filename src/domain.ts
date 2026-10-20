@@ -3,7 +3,7 @@ export interface Clip { start: number; end: number }
 export interface Content { clips: Clip[]; tokens: Token[] }
 export interface Asset { id: string; name: string; duration: number; checksum: string }
 export interface Project extends Content { id: string; title: string; revision: number; asset: Asset; canUndo: boolean; canRedo: boolean }
-export interface Job { id: string; projectId: string; revision: number; status: string; error?: string; duration: number }
+export interface Job { id: string; projectId: string; revision: number; status: string; error?: string; duration: number; proposalId?: string }
 export class InputError extends Error { constructor(message: string, public status = 400) { super(message); } }
 export function validateTokens(value: unknown, duration: number): Token[] {
   if (!Array.isArray(value) || value.length > 50000) throw new InputError('Expected an array of at most 50,000 timed words.');

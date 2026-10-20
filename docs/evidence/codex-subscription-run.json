@@ -1,0 +1,57 @@
+{
+  "testedAt": "2026-10-20T02:59:17.322Z",
+  "provider": "installed Codex CLI with ChatGPT login",
+  "requestedModel": "gpt-6.1-sol",
+  "proposedVideoPreviewSeconds": 2,
+  "auditionDecodedBlue": true,
+  "auditionPlayed": true,
+  "unchangedUntilApply": true,
+  "persistedAfterReload": true,
+  "exported": true,
+  "undoRestoredFiller": true,
+  "threadFingerprint": "d01be5af00cb91b222b4385165d9ca11d2ec7c46fd6481d0a0d5e44e3c826fa7",
+  "scope": [
+    "word-1",
+    "word-1"
+  ],
+  "summary": "Remove only the filler word “um”. Keep Red and Blue unchanged.",
+  "operations": [
+    {
+      "kind": "remove_words",
+      "first": "word-1",
+      "last": "word-1",
+      "reason": "Remove the requested filler word."
+    }
+  ],
+  "exportDurationSeconds": 2,
+  "streams": [
+    "video",
+    "audio"
+  ],
+  "frames": [
+    {
+      "time": 0.5,
+      "rgb": [
+        254,
+        0,
+        0
+      ]
+    },
+    {
+      "time": 1.5,
+      "rgb": [
+        0,
+        0,
+        255
+      ]
+    }
+  ],
+  "audioHz": [
+    440,
+    1315
+  ],
+  "audioMeasurementToleranceHz": 20,
+  "browserErrors": [],
+  "localArtifacts": ".artifacts/codex-acceptance/codex-live-Codex-subscript-f32b6-pplies-persists-and-exports",
+  "scopeLimit": "Controlled color/tone fixture and explicit transcript; not speech recognition or generated narration. Raw thread ID remains local."
+}

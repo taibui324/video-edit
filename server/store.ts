@@ -1,11 +1,12 @@
 import { DatabaseSync } from 'node:sqlite';
 import { InputError, removeWords, validateTokens, type Content, type Asset, type Project } from '../src/domain.ts';
+import { applyPlan, type Scope } from '../src/proposals.ts';
 interface Head { id: string; title: string; assetId: string; revision: number; undo: string; redo: string }
 export class Store {
   db: DatabaseSync;
   constructor(path: string) {
     this.db = new DatabaseSync(path);
-    this.db.exec(`PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS assets (id TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, title TEXT NOT NULL, assetId TEXT NOT NULL, revision INTEGER NOT NULL, undo TEXT NOT NULL, redo TEXT NOT NULL); CREATE TABLE IF NOT EXISTS revisions (projectId TEXT NOT NULL, revision INTEGER NOT NULL, content TEXT NOT NULL, PRIMARY KEY(projectId,revision)); CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, value TEXT NOT NULL);`);
+    this.db.exec(`PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS assets (id TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, title TEXT NOT NULL, assetId TEXT NOT NULL, revision INTEGER NOT NULL, undo TEXT NOT NULL, redo TEXT NOT NULL); CREATE TABLE IF NOT EXISTS revisions (projectId TEXT NOT NULL, revision INTEGER NOT NULL, content TEXT NOT NULL, PRIMARY KEY(projectId,revision)); CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS proposals (id TEXT PRIMARY KEY, value TEXT NOT NULL);`);
   }
   asset(id: string): Asset { const row = this.db.prepare('SELECT value FROM assets WHERE id=?').get(id); if (!row) throw new InputError('Media not found.', 404); return JSON.parse(row.value as string); }
   head(id: string): Head { const row = this.db.prepare('SELECT * FROM projects WHERE id=?').get(id); if (!row) throw new InputError('Project not found.', 404); return row as unknown as Head; }
@@ -28,6 +29,12 @@ export class Store {
       else {
         if (op === 'transcript') { if (content.tokens.length) throw new InputError('A transcript is already attached. Undo its attachment before replacing it.'); content = { ...content, tokens: validateTokens(value, this.asset(h.assetId).duration) }; }
         else if (op === 'cut') content = removeWords(content, value);
+        else if (op === 'plan') {
+          const v = value as { plan: unknown; scope: Scope };
+          const result = applyPlan(content, v?.plan, v?.scope);
+          if (!result.plan.operations.length) throw new InputError('This proposal contains no changes.');
+          content = result.content;
+        }
         else throw new InputError('Unsupported edit.');
         undo.push(h.revision); redo.length = 0;
       }
