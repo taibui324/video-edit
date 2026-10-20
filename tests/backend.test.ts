@@ -21,10 +21,12 @@ test('real API import, revision conflicts, history, frozen export, pixel/audio t
     assert.equal((await request(`/projects/${p.id}/commands`, { revision: p.revision, op: 'transcript', value: [{ text: 'bad', start: 1, end: 99999 }] })).status, 400);
     p = await (await request(`/projects/${p.id}/commands`, { revision: p.revision, op: 'transcript', value: fixtureTokens })).json();
     const proposed = await (await request(`/projects/${p.id}/proposals`, { revision: p.revision, instruction: 'Remove middle marker.', scope: null })).json();
-    for (let i = 0; i < 200; i++) { const state = await (await request(`/proposals/${proposed.id}`)).json(); if (state.status === 'succeeded') break; await new Promise(r => setTimeout(r, 10)); }
+    let proposalState;
+    for (let i = 0; i < 200; i++) { proposalState = await (await request(`/proposals/${proposed.id}`)).json(); if (['succeeded', 'failed'].includes(proposalState.status)) break; await new Promise(r => setTimeout(r, 100)); }
+    assert.equal(proposalState.status, 'succeeded', proposalState.error);
     const audition = await (await request(`/proposals/${proposed.id}/preview`, { revision: p.revision })).json();
     let auditionState;
-    for (let i = 0; i < 200; i++) { auditionState = await (await request(`/exports/${audition.id}`)).json(); if (['succeeded', 'failed'].includes(auditionState.status)) break; await new Promise(r => setTimeout(r, 10)); }
+    for (let i = 0; i < 200; i++) { auditionState = await (await request(`/exports/${audition.id}`)).json(); if (['succeeded', 'failed'].includes(auditionState.status)) break; await new Promise(r => setTimeout(r, 100)); }
     assert.equal(auditionState.status, 'succeeded', auditionState.error);
     assert.equal(studio.store.get(p.id).revision, p.revision); assert.equal(studio.store.get(p.id).clips.length, 1);
     const beforeCut = p.revision;
