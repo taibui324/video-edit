@@ -20,13 +20,21 @@ let input = ''; process.stdin.on('data', d => input += d); process.stdin.on('end
  console.log(JSON.stringify({type:'thread.started',thread_id:'contract-thread'}));
  if (input.includes('TOOL_CASE')) { console.log(JSON.stringify({type:'item.started',item:{type:'command_execution'}})); setInterval(()=>{},1000); return; }
  if (input.includes('ABORT_CASE')) { setInterval(()=>{},1000); return; }
+ if (input.includes('RETRY_CASE')) console.log(JSON.stringify({type:'error',message:'Reconnecting... 1/5'}));
+ if (input.includes('TURN_FAILED_CASE')) { console.log(JSON.stringify({type:'turn.failed',error:{message:'Contract failure.'}})); return; }
+ if (input.includes('ERROR_EXIT_CASE')) { console.log(JSON.stringify({type:'error',message:'Contract terminal error.'})); process.exitCode=1; return; }
  fs.writeFileSync(args[args.indexOf('--output-last-message')+1], JSON.stringify({summary:'No changes.',operations:[]}));
+ if (!input.includes('MISSING_COMPLETION_CASE')) console.log(JSON.stringify({type:'turn.completed',usage:{}}));
 });
 `);
     await chmod(executable, 0o700); process.env.PATH = `${folder}:${previousPath}`; process.env.OPENAI_API_KEY = 'synthetic-do-not-forward';
     assert.equal((await codexPlanner()).available, true);
     let thread = ''; const controller = new AbortController();
     assert.deepEqual(await runCodexPlan({ instruction: 'No changes.', words: [] }, controller.signal, id => { thread = id; }), { summary: 'No changes.', operations: [] }); assert.equal(thread, 'contract-thread');
+    assert.deepEqual(await runCodexPlan({ instruction: 'RETRY_CASE', words: [] }, controller.signal, () => {}), { summary: 'No changes.', operations: [] });
+    await assert.rejects(runCodexPlan({ instruction: 'TURN_FAILED_CASE', words: [] }, controller.signal, () => {}), /could not complete/);
+    await assert.rejects(runCodexPlan({ instruction: 'ERROR_EXIT_CASE', words: [] }, controller.signal, () => {}), /exited with code 1/);
+    await assert.rejects(runCodexPlan({ instruction: 'MISSING_COMPLETION_CASE', words: [] }, controller.signal, () => {}), /without completing a turn/);
     await assert.rejects(runCodexPlan({ instruction: 'TOOL_CASE', words: [] }, controller.signal, () => {}), /unsupported tool action/);
     const abort = new AbortController(); const running = runCodexPlan({ instruction: 'ABORT_CASE', words: [] }, abort.signal, () => abort.abort());
     await assert.rejects(running, /Cancelled/);
