@@ -1,0 +1,33 @@
+{
+  "testedAt": "2026-10-20T03:24:15.998Z",
+  "fixture": "macOS Samantha stock synthesis; controlled English sentence, not a human-recording quality benchmark",
+  "model": "Local Whisper · CPU int8",
+  "provenance": {
+    "runtime": "faster-whisper@1.2.1",
+    "modelSha256": "d01c3014881c9c6f3133c182f3d2887eb6ca1c789a7538c5c007196857a0a6a9"
+  },
+  "language": "en",
+  "recognizedWords": 19,
+  "exactNormalizedWords": true,
+  "unchangedBeforeAttach": true,
+  "persistedCut": true,
+  "played": true,
+  "undoRestored": true,
+  "exportDurationSeconds": 6.466667,
+  "expectedDurationMs": 6460,
+  "captionsMatched": true,
+  "browserErrors": [],
+  "modelSnapshot": "Systran/faster-whisper-base@ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66",
+  "localArtifacts": ".artifacts/speech-final-acceptance/transcription-real-local-s-eb371--persists-plays-and-exports",
+  "additionalProbes": {
+    "networkDeniedRecognition": {
+      "platform": "macOS sandbox-exec",
+      "recognizedWords": 19
+    },
+    "actualPythonCancellation": {
+      "childExited": true,
+      "temporaryAudioRemoved": true,
+      "abortMs": 47
+    }
+  }
+}
